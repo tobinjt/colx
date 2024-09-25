@@ -1,0 +1,53 @@
+# See https://pre-commit.com for more information
+# See https://pre-commit.com/hooks.html for more hooks
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v4.6.0
+    hooks:
+      - id: check-merge-conflict
+      - id: check-vcs-permalinks
+  - repo: local
+    hooks:
+      - id: cargo-fmt
+        name: Run `cargo fmt`
+        language: system
+        types: [rust]
+        entry: cargo fmt
+        args: ["--"]
+      - id: cargo-check
+        name: Run `cargo check`
+        language: system
+        types: [rust]
+        entry: cargo check
+        pass_filenames: false
+      - id: cargo-clippy
+        name: Run `cargo clippy`
+        language: system
+        types: [rust]
+        entry: cargo clippy
+        # Turn warnings into errors.
+        args: ["--", "--deny", "warnings"]
+        pass_filenames: false
+      - id: cargo-test
+        name: Run `cargo test`
+        language: system
+        types: [rust]
+        entry: cargo test
+        args: []
+        pass_filenames: false
+      - id: cargo-llvm-cov
+        name: Run `cargo llvm-cov`
+        language: system
+        types: [rust]
+        entry: cargo llvm-cov test
+        args:
+          [
+            "--fail-uncovered-lines=4",
+            "--fail-uncovered-functions=1",
+            "--quiet",
+          ]
+        pass_filenames: false
+  - repo: meta
+    hooks:
+      - id: check-hooks-apply
+      - id: check-useless-excludes
