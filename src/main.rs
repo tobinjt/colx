@@ -1,6 +1,63 @@
 #![allow(dead_code)]
+use clap::Parser;
 use std::fs::File;
 use std::io::Read;
+
+const ABOUT_TEXT: &str = r#"
+Extract the specified columns from FILES or stdin.
+
+Column numbering starts at 1, not 0; column 0 is the entire line, just like awk.
+Column numbers that are out of bounds are silently ignored.  When each line is
+split, empty leading or trailing columns will be discarded _before_ columns are
+extracted.
+
+Negative column numbers are accepted; -1 is the last column, -2 is the second
+last, etc.  Note that negative column numbers may not behave as you expect when
+files have a variable number of columns per line: e.g. in line 1 column -1 is
+column 10, but in line 2 column -1 is column 5.
+You need to put -- before the first negative column number, otherwise it will be
+interpreted as a non-existent option.
+
+Column ranges of the form 3:8, -3:1, 7:-7, and -1:-3 are accepted.  Both start
+and end are required for each range.  It is not an error to specify an end point
+that is out of bounds for a line, so 3:1000 will print all columns from 3
+onwards (unless you have a *very* long line).
+"#;
+
+#[derive(Debug, Parser)]
+#[command(version, about, long_about = ABOUT_TEXT)]
+struct Flags {
+    // Providing a default value makes it optional.
+    #[arg(
+        short,
+        long,
+        help = "Regex delimiting input columns; defaults to whitespace",
+        default_value = " "
+    )]
+    delimiter: Option<String>,
+    // Providing a default value makes it optional.
+    #[arg(
+        short,
+        long,
+        help = "Separator between output columns; defaults to a single space;\nbackslash escape sequences will be expanded",
+        default_value = " "
+    )]
+    separator: Option<String>,
+
+    #[arg(
+        help = "Initial arguments that looks like column specifiers are used as\ncolumn specifiers, then remaining arguments are used as filenames"
+    )]
+    columns_then_files: Vec<String>,
+}
+
+// Placeholder for eventual options.
+struct Options {}
+
+impl Options {
+    fn new() -> Self {
+        Self {}
+    }
+}
 
 /// Read from all the provided files, reading from the next file when the end of the current file
 /// is reached.
@@ -83,8 +140,40 @@ impl Read for StdinOrFiles {
     }
 }
 
+fn realmain(_options: Options, _flags: Flags) -> String {
+    String::from("asdf")
+}
+
 fn main() {
-    println!("Hello, world!");
+    println!("{}", realmain(Options::new(), Flags::parse()));
+}
+
+#[cfg(test)]
+mod clap_test {
+    use super::*;
+    use clap::CommandFactory;
+
+    #[test]
+    fn verify() {
+        Flags::command().debug_assert();
+    }
+
+    #[test]
+    fn parse_args() {
+        // Checks that I've configured the parser correctly.
+        let flags = Flags::parse_from(vec!["argv0", "1"]);
+        assert_eq!(Some(" "), flags.delimiter.as_deref());
+
+        let flags = Flags::parse_from(vec![
+            "argv0",
+            "--separator",
+            "asdf",
+            "--delimiter",
+            "qwerty",
+            "1",
+        ]);
+        assert_eq!(Some("asdf"), flags.separator.as_deref());
+    }
 }
 
 #[cfg(test)]
@@ -216,5 +305,18 @@ mod stdin_or_files {
             String::from("testdata/file3"),
         ];
         assert!(StdinOrFiles::new(filenames).is_err());
+    }
+}
+
+#[cfg(test)]
+mod realmain {
+    use super::*;
+
+    #[test]
+    fn placeholder_test() {
+        assert_eq!(
+            "asdf",
+            realmain(Options::new(), Flags::parse_from(vec!["argv0"]))
+        );
     }
 }
