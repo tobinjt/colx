@@ -1,5 +1,6 @@
 #![allow(dead_code)]
 use clap::Parser;
+use regex::Regex;
 use std::fs::File;
 use std::io::Read;
 
@@ -138,6 +139,31 @@ impl Read for StdinOrFiles {
     fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
         self.reader.read(buf)
     }
+}
+
+#[derive(Debug, PartialEq)]
+struct ColumnRange {
+    start: isize,
+    end: isize,
+}
+
+fn parse_column_range(maybe_column: &str) -> Option<ColumnRange> {
+    if let Ok(single_column) = maybe_column.parse::<isize>() {
+        return Some(ColumnRange {
+            start: single_column,
+            end: single_column,
+        });
+    }
+
+    let regex = Regex::new(r"^(-?\d+):(-?\d+)$").unwrap();
+    if let Some(matches) = regex.captures(maybe_column) {
+        return Some(ColumnRange {
+            start: matches[1].parse::<isize>().unwrap(),
+            end: matches[2].parse::<isize>().unwrap(),
+        });
+    }
+
+    None
 }
 
 fn realmain(_options: Options, _flags: Flags) -> String {
@@ -318,5 +344,48 @@ mod realmain {
             "asdf",
             realmain(Options::new(), Flags::parse_from(vec!["argv0"]))
         );
+    }
+}
+
+#[cfg(test)]
+mod parse_column_range {
+    use super::*;
+
+    #[test]
+    fn parse_single_column() {
+        assert_eq!(
+            Some(ColumnRange { start: 1, end: 1 }),
+            parse_column_range("1")
+        );
+        assert_eq!(
+            Some(ColumnRange { start: -2, end: -2 }),
+            parse_column_range("-2")
+        );
+    }
+
+    #[test]
+    fn parse_multiple_columns() {
+        assert_eq!(
+            Some(ColumnRange { start: 1, end: 7 }),
+            parse_column_range("1:7")
+        );
+        assert_eq!(
+            Some(ColumnRange { start: -6, end: -2 }),
+            parse_column_range("-6:-2")
+        );
+        assert_eq!(
+            Some(ColumnRange { start: 3, end: -2 }),
+            parse_column_range("3:-2")
+        );
+    }
+
+    #[test]
+    fn rejected() {
+        assert_eq!(None, parse_column_range("a"));
+        assert_eq!(None, parse_column_range("1.2"));
+        assert_eq!(None, parse_column_range("1:a"));
+        assert_eq!(None, parse_column_range("1:2-"));
+        assert_eq!(None, parse_column_range(":2"));
+        assert_eq!(None, parse_column_range("1:"));
     }
 }
