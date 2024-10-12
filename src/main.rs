@@ -166,6 +166,12 @@ fn parse_column_range(maybe_column: &str) -> Option<ColumnRange> {
     None
 }
 
+fn separate_args(args: Vec<String>) -> (Vec<ColumnRange>, Vec<String>) {
+    let columns: Vec<ColumnRange> = args.iter().map_while(|x| parse_column_range(x)).collect();
+    let filenames: Vec<String> = args[columns.len()..].to_vec();
+    (columns, filenames)
+}
+
 fn realmain(_options: Options, _flags: Flags) -> String {
     String::from("asdf")
 }
@@ -387,5 +393,59 @@ mod parse_column_range {
         assert_eq!(None, parse_column_range("1:2-"));
         assert_eq!(None, parse_column_range(":2"));
         assert_eq!(None, parse_column_range("1:"));
+    }
+}
+
+#[cfg(test)]
+mod separate_args {
+    use super::*;
+
+    #[test]
+    fn no_args() {
+        let (columns, filenames) = separate_args(vec![]);
+        assert_eq!(Vec::<ColumnRange>::new(), columns);
+        assert_eq!(Vec::<String>::new(), filenames);
+    }
+
+    #[test]
+    fn columns_then_files() {
+        let (actual_columns, actual_filenames) = separate_args(vec![
+            String::from("1"),
+            String::from("4:-2"),
+            String::from("foo"),
+            String::from("bar"),
+            String::from("baz"),
+        ]);
+        let expected_columns = vec![
+            ColumnRange { start: 1, end: 1 },
+            ColumnRange { start: 4, end: -2 },
+        ];
+        assert_eq!(expected_columns, actual_columns);
+        let expected_filenames = vec![
+            String::from("foo"),
+            String::from("bar"),
+            String::from("baz"),
+        ];
+        assert_eq!(expected_filenames, actual_filenames);
+    }
+
+    #[test]
+    fn mixed_columns_and_files() {
+        let (actual_columns, actual_filenames) = separate_args(vec![
+            String::from("4:-2"),
+            String::from("foo"),
+            String::from("bar"),
+            String::from("1"),
+            String::from("baz"),
+        ]);
+        let expected_columns = vec![ColumnRange { start: 4, end: -2 }];
+        assert_eq!(expected_columns, actual_columns);
+        let expected_filenames = vec![
+            String::from("foo"),
+            String::from("bar"),
+            String::from("1"),
+            String::from("baz"),
+        ];
+        assert_eq!(expected_filenames, actual_filenames);
     }
 }
