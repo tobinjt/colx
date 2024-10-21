@@ -61,7 +61,7 @@ impl Options {
 }
 
 /// Read from all the provided files, reading from the next file when the end of the current file
-/// is reached.
+/// is reached.  Uses StdinOrFile to support reading from Stdin.
 struct MultipleFileReader {
     filehandles: Vec<Box<dyn Read>>,
 }
@@ -69,13 +69,13 @@ struct MultipleFileReader {
 impl MultipleFileReader {
     /// Initialises and returns a MultipleFileReader from a list of filenames.
     ///
-    /// All the filenames provided will be opened eagerly, so problems related to permissions or
-    /// existence will be detected by new and the error from [File::open](std::fs::File::open)
-    /// will be returned.
+    /// All the filenames provided will be opened eagerly by StdinOrFile, so problems related to
+    /// permissions or existence will be detected by new and the error from
+    /// [File::open](std::fs::File::open) will be returned.
     fn new(filenames: Vec<String>) -> Result<Self, std::io::Error> {
         let mut filehandles: Vec<Box<dyn Read>> = Vec::with_capacity(filenames.len());
         for filename in filenames {
-            filehandles.push(Box::new(File::open(filename)?));
+            filehandles.push(Box::new(StdinOrFile::new(&filename)?));
         }
         Ok(Self::new_from_filehandles(filehandles))
     }
@@ -88,7 +88,7 @@ impl MultipleFileReader {
     }
 }
 
-/// Implements the [std::io::Read] Trait.
+/// Implements the [std::io::Read] trait for MultipleFileReader.
 impl Read for MultipleFileReader {
     /// - A single read() will not return data from two inputs.
     /// - Advances to the next input when a read() from the current input filehandle returns 0, so
@@ -96,7 +96,7 @@ impl Read for MultipleFileReader {
     ///   be retried.
     /// - The current input filehandle will be discarded when moving on to the next input, so it
     ///   will automatically be closed.
-    /// - Errors from underlying read() calls are returned *without* advancing to the next input
+    /// - Errors from underlying read() calls are returned *without* advancing to the next input.
     fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
         while !self.filehandles.is_empty() {
             let length = self.filehandles[0].read(buf)?;
@@ -111,33 +111,31 @@ impl Read for MultipleFileReader {
     }
 }
 
-/// Returns a MultipleFileReader (if filenames are provided) or stdin if no filenames are provided.
-struct StdinOrFiles {
-    reader: Box<dyn Read>,
+/// Holds a reference to either Stdin or a File.
+enum StdinOrFile {
+    Stdin(std::io::Stdin),
+    File(std::fs::File),
 }
 
-impl StdinOrFiles {
-    /// Initialises and returns a StdinOrFiles.
-    ///
-    /// If filenames are provided, creates and wraps a MultipleFileReader to read all the files.
-    /// Otherwise creates and wraps an std:io::stdin().
-    fn new(filenames: Vec<String>) -> Result<Self, std::io::Error> {
-        if filenames.is_empty() {
-            Ok(Self {
-                reader: Box::new(std::io::stdin()),
-            })
+impl StdinOrFile {
+    /// Initialises and returns a StdinOrFile.  If filename is "-", the returned object will read
+    /// from Stdin, otherwise the file will be opened and read from.
+    fn new(filename: &str) -> Result<Self, std::io::Error> {
+        if filename == "-" {
+            Ok(Self::Stdin(std::io::stdin()))
         } else {
-            Ok(Self {
-                reader: Box::new(MultipleFileReader::new(filenames)?),
-            })
+            Ok(Self::File(File::open(filename)?))
         }
     }
 }
 
-/// Implements [std::io::Read] for StdinOrFiles.
-impl Read for StdinOrFiles {
+/// Implements [std::io::Read] for StdinOrFile.
+impl Read for StdinOrFile {
     fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
-        self.reader.read(buf)
+        match self {
+            StdinOrFile::Stdin(stdin) => stdin.read(buf),
+            StdinOrFile::File(file) => file.read(buf),
+        }
     }
 }
 
@@ -297,46 +295,34 @@ mod multiple_file_reader {
 }
 
 #[cfg(test)]
-mod stdin_or_files {
+mod stdin_or_file {
     use super::*;
     use std::io::BufRead;
     use std::io::BufReader;
 
     #[test]
-    fn no_files() {
-        assert!(StdinOrFiles::new(vec![]).is_ok());
-        // TODO: what can I test here?
-    }
+    fn open_file() {
+        let fh = StdinOrFile::new("testdata/file1").unwrap();
+        assert!(matches!(fh, StdinOrFile::File(_)));
 
-    #[test]
-    fn two_files() {
-        let fh = StdinOrFiles::new(vec![
-            String::from("testdata/file1"),
-            String::from("testdata/file2"),
-        ])
-        .unwrap();
         let lines: Vec<String> = BufReader::new(fh).lines().map(|l| l.unwrap()).collect();
         let expected = vec![
             String::from("This is file 1."),
             String::from(""),
             String::from("It is not very interesting."),
-            String::from("File 2 isn't really any better than file 1."),
-            String::from(""),
-            String::from(""),
-            String::from("It has more blank lines.  Including a trailing blank line."),
-            String::from(""),
         ];
         assert_eq!(expected, lines);
     }
 
     #[test]
+    fn open_stdin() {
+        let fh = StdinOrFile::new("-");
+        assert!(matches!(fh, Ok(StdinOrFile::Stdin(_))));
+    }
+
+    #[test]
     fn open_fails() {
-        let filenames = vec![
-            String::from("testdata/file1"),
-            String::from("testdata/file_does_not_exist"),
-            String::from("testdata/file3"),
-        ];
-        assert!(StdinOrFiles::new(filenames).is_err());
+        assert!(StdinOrFile::new("testdata/file_does_not_exist").is_err());
     }
 }
 
