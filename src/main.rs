@@ -73,10 +73,22 @@ impl MultipleFileReader {
     /// permissions or existence will be detected by new and the error from
     /// [File::open](std::fs::File::open) will be returned.
     fn new(filenames: Vec<String>) -> Result<Self, std::io::Error> {
+        Self::new_with_opener(filenames, std::io::stdin)
+    }
+
+    // This function allows tests to use dependency injection to check that the correct function is
+    // called when the filename is "-".  This is not intended for others to use.
+    fn new_with_opener<Closure>(
+        filenames: Vec<String>,
+        mut stdin_opener: Closure,
+    ) -> Result<Self, std::io::Error>
+    where
+        Closure: FnMut() -> std::io::Stdin,
+    {
         let mut filehandles: Vec<Box<dyn Read>> = Vec::with_capacity(filenames.len());
         for filename in filenames {
             if filename == "-" {
-                filehandles.push(Box::new(std::io::stdin()));
+                filehandles.push(Box::new(stdin_opener()));
             } else {
                 filehandles.push(Box::new(File::open(filename)?));
             }
@@ -200,7 +212,35 @@ mod multiple_file_reader {
 
     #[test]
     fn stdin() {
-        MultipleFileReader::new(vec![String::from("-")]).unwrap();
+        let mut call_count = 0;
+        let wrapper = || {
+            call_count += 1;
+            std::io::stdin()
+        };
+        MultipleFileReader::new_with_opener(vec![String::from("-")], wrapper).unwrap();
+        assert_eq!(1, call_count);
+    }
+
+    #[test]
+    fn stdin_and_files() {
+        let mut call_count = 0;
+        let wrapper = || {
+            call_count += 1;
+            std::io::stdin()
+        };
+
+        // Opening twice isn't very useful, but should work.
+        MultipleFileReader::new_with_opener(
+            vec![
+                String::from("-"),
+                String::from("testdata/file1"),
+                String::from("-"),
+                String::from("testdata/file2"),
+            ],
+            wrapper,
+        )
+        .unwrap();
+        assert_eq!(2, call_count);
     }
 
     #[test]
