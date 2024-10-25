@@ -158,6 +158,31 @@ fn separate_args(args: Vec<String>) -> (Vec<ColumnRange>, Vec<String>) {
     (columns, filenames)
 }
 
+// Note: the whole line should be the first column.
+fn extract_columns<'a>(column_ranges: &[ColumnRange], columns: &'a [&'a str]) -> Vec<&'a str> {
+    let mut results = vec![];
+    for column_range in column_ranges.iter() {
+        for i in column_range.start..=column_range.end {
+            let j = if i < 0 {
+                // Convert separately because it's much easier than combining conversion and math.
+                let len: isize = columns.len().try_into().unwrap();
+                i + len
+            } else {
+                i
+            };
+            if j < 0 {
+                continue;
+            }
+            let k: usize = j.try_into().unwrap();
+            if k >= columns.len() {
+                continue;
+            }
+            results.push(columns[k])
+        }
+    }
+    results
+}
+
 fn realmain(_options: Options, _flags: Flags) -> String {
     String::from("asdf")
 }
@@ -422,5 +447,69 @@ mod separate_args {
             String::from("baz"),
         ];
         assert_eq!(expected_filenames, actual_filenames);
+    }
+}
+
+#[cfg(test)]
+mod extract_columns {
+    use super::*;
+
+    #[test]
+    fn single_column() {
+        let expected = vec!["asdf"];
+        let column_ranges = [ColumnRange { start: 1, end: 1 }];
+        let columns = ["ignored", "asdf", "ignored"];
+        let actual = extract_columns(&column_ranges, &columns);
+        assert_eq!(expected, actual);
+    }
+
+    #[test]
+    fn out_of_bounds_column() {
+        let expected: Vec<&str> = vec![];
+        let column_ranges = [ColumnRange { start: 7, end: 7 }];
+        let columns = ["ignored", "ignored", "ignored"];
+        let actual = extract_columns(&column_ranges, &columns);
+        assert_eq!(expected, actual);
+    }
+
+    #[test]
+    fn single_range() {
+        let expected = vec!["two", "three", "four"];
+        let column_ranges = [ColumnRange { start: 2, end: 4 }];
+        let columns = ["zero", "one", "two", "three", "four", "five"];
+        let actual = extract_columns(&column_ranges, &columns);
+        assert_eq!(expected, actual);
+    }
+
+    #[test]
+    fn partially_out_of_bounds_range() {
+        let expected = vec!["two", "three", "four", "five"];
+        let column_ranges = [ColumnRange { start: 2, end: 6 }];
+        let columns = ["zero", "one", "two", "three", "four", "five"];
+        let actual = extract_columns(&column_ranges, &columns);
+        assert_eq!(expected, actual);
+    }
+
+    #[test]
+    fn negative_index() {
+        let expected = vec!["four", "five", "zero", "one", "two", "three"];
+        let column_ranges = [ColumnRange { start: -2, end: 3 }];
+        let columns = ["zero", "one", "two", "three", "four", "five"];
+        let actual = extract_columns(&column_ranges, &columns);
+        assert_eq!(expected, actual);
+    }
+
+    #[test]
+    fn overlapping_ranges() {
+        let expected = vec![
+            "two", "three", "four", "one", "two", "three", "four", "five",
+        ];
+        let column_ranges = [
+            ColumnRange { start: 2, end: 4 },
+            ColumnRange { start: 1, end: 5 },
+        ];
+        let columns = ["zero", "one", "two", "three", "four", "five"];
+        let actual = extract_columns(&column_ranges, &columns);
+        assert_eq!(expected, actual);
     }
 }
