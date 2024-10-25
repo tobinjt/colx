@@ -162,7 +162,12 @@ fn separate_args(args: Vec<String>) -> (Vec<ColumnRange>, Vec<String>) {
 fn extract_columns<'a>(column_ranges: &[ColumnRange], columns: &'a [&'a str]) -> Vec<&'a str> {
     let mut results = vec![];
     for column_range in column_ranges.iter() {
-        for i in column_range.start..=column_range.end {
+        let indices: Vec<isize> = if column_range.start < column_range.end {
+            (column_range.start..=column_range.end).collect()
+        } else {
+            (column_range.end..=column_range.start).rev().collect()
+        };
+        for i in indices {
             let j = if i < 0 {
                 // Convert separately because it's much easier than combining conversion and math.
                 let len: isize = columns.len().try_into().unwrap();
@@ -508,6 +513,31 @@ mod extract_columns {
             ColumnRange { start: 2, end: 4 },
             ColumnRange { start: 1, end: 5 },
         ];
+        let columns = ["zero", "one", "two", "three", "four", "five"];
+        let actual = extract_columns(&column_ranges, &columns);
+        assert_eq!(expected, actual);
+    }
+
+    #[test]
+    fn really_out_of_bounds_indices() {
+        let column_ranges = [ColumnRange {
+            start: -20,
+            end: 20,
+        }];
+        let columns = ["zero", "one", "two", "three", "four", "five"];
+        // We'll get all the columns once using -6:-1 and a second time using 0:5.
+        let expected = vec![
+            "zero", "one", "two", "three", "four", "five", "zero", "one", "two", "three", "four",
+            "five",
+        ];
+        let actual = extract_columns(&column_ranges, &columns);
+        assert_eq!(expected, actual);
+    }
+
+    #[test]
+    fn reversed_indices() {
+        let expected = vec!["four", "three", "two"];
+        let column_ranges = [ColumnRange { start: 4, end: 2 }];
         let columns = ["zero", "one", "two", "three", "four", "five"];
         let actual = extract_columns(&column_ranges, &columns);
         assert_eq!(expected, actual);
