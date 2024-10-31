@@ -69,9 +69,13 @@ struct MultipleFileReader {
 impl MultipleFileReader {
     /// Initialises and returns a MultipleFileReader from a list of filenames.
     ///
-    /// All the filenames provided will be opened eagerly by StdinOrFile, so problems related to
-    /// permissions or existence will be detected by new and the error from
-    /// [File::open](std::fs::File::open) will be returned.
+    /// All the filenames provided will be opened eagerly, so problems related to permissions or
+    /// existence will be detected by new and the error from [File::open](std::fs::File::open) will
+    /// be returned.
+    ///
+    /// A filename of "-" will use [std::io::stdin] to open stdin.
+    ///
+    /// If filenames is empty a filename of "-" will be used instead.
     fn new(filenames: Vec<String>) -> Result<Self, std::io::Error> {
         Self::new_with_opener(filenames, std::io::stdin)
     }
@@ -85,6 +89,10 @@ impl MultipleFileReader {
     where
         Closure: FnMut() -> std::io::Stdin,
     {
+        if filenames.is_empty() {
+            return Self::new_with_opener(vec![String::from("-")], stdin_opener);
+        }
+
         let mut filehandles: Vec<Box<dyn Read>> = Vec::with_capacity(filenames.len());
         for filename in filenames {
             if filename == "-" {
@@ -97,7 +105,7 @@ impl MultipleFileReader {
     }
 
     /// Initialises and returns a MultipleFileReader from a list of filehandles (anything
-    /// implementing the [std::io::Read] trait.  Uses the filehandles unchanged, so they can
+    /// implementing the [std::io::Read] trait).  Uses the filehandles unchanged, so they can
     /// point to anything: files, stdin, sockets, ...
     fn new_from_filehandles(filehandles: Vec<Box<dyn Read>>) -> MultipleFileReader {
         Self { filehandles }
@@ -248,6 +256,17 @@ mod multiple_file_reader {
             std::io::stdin()
         };
         MultipleFileReader::new_with_opener(vec![String::from("-")], wrapper).unwrap();
+        assert_eq!(1, call_count);
+    }
+
+    #[test]
+    fn empty_vec_means_stdin() {
+        let mut call_count = 0;
+        let wrapper = || {
+            call_count += 1;
+            std::io::stdin()
+        };
+        MultipleFileReader::new_with_opener(vec![], wrapper).unwrap();
         assert_eq!(1, call_count);
     }
 
