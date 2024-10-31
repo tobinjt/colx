@@ -2,6 +2,8 @@
 use clap::Parser;
 use regex::Regex;
 use std::fs::File;
+use std::io::BufRead;
+use std::io::BufReader;
 use std::io::Read;
 
 const ABOUT_TEXT: &str = r#"
@@ -51,13 +53,11 @@ struct Flags {
     columns_then_files: Vec<String>,
 }
 
-// Placeholder for eventual options.
-struct Options {}
-
-impl Options {
-    fn new() -> Self {
-        Self {}
-    }
+// Holds the config the user wants, translated from Flags.
+struct Options {
+    delimiter: Regex,
+    separator: String,
+    column_ranges: Vec<ColumnRange>,
 }
 
 /// Read from all the provided files, reading from the next file when the end of the current file
@@ -196,12 +196,48 @@ fn extract_columns<'a>(column_ranges: &[ColumnRange], columns: &'a [&'a str]) ->
     results
 }
 
-fn realmain(_options: Options, _flags: Flags) -> String {
+// A thin wrapper around println!, to be called by process_single_line().
+fn println_wrapper(print_me: String) {
+    println!("{}", print_me);
+}
+
+// Process a single line, splitting it, extracting columns, assembling the output, and returning
+// it.
+// TODO: implement process_single_line().
+fn process_single_line(_options: &Options, _line: &str) -> String {
     String::from("asdf")
 }
 
+// main(), but testable.
+fn realmain<T: FnMut(String)>(flags: Flags, mut output_handler: T) {
+    let delimiter = Regex::new(
+        flags
+            .delimiter
+            .expect("Internal error: flags should have a default value for delimiter")
+            .as_str(),
+    )
+    .unwrap();
+
+    let separator = flags
+        .separator
+        .expect("Internal error: flags should have a default value for separator");
+
+    let (column_ranges, filenames) = separate_args(flags.columns_then_files);
+    let input = MultipleFileReader::new(filenames).unwrap();
+
+    let options = Options {
+        delimiter,
+        separator,
+        column_ranges,
+    };
+
+    for line in BufReader::new(input).lines() {
+        output_handler(process_single_line(&options, &line.unwrap()));
+    }
+}
+
 fn main() {
-    println!("{}", realmain(Options::new(), Flags::parse()));
+    realmain(Flags::parse(), println_wrapper);
 }
 
 #[cfg(test)]
@@ -365,15 +401,43 @@ mod multiple_file_reader {
 }
 
 #[cfg(test)]
-mod realmain {
+mod println_wrapper {
     use super::*;
 
     #[test]
     fn placeholder_test() {
-        assert_eq!(
-            "asdf",
-            realmain(Options::new(), Flags::parse_from(vec!["argv0"]))
+        println_wrapper(String::from("printed by println_wrapper test."));
+    }
+}
+
+#[cfg(test)]
+mod realmain {
+    use super::*;
+
+    #[test]
+    fn does_not_crash_test() {
+        realmain(
+            Flags::parse_from(vec!["argv0", "testdata/file1"]),
+            println_wrapper,
         );
+    }
+
+    #[test]
+    fn basic_test() {
+        let expected = vec![
+            String::from("asdf"),
+            String::from("asdf"),
+            String::from("asdf"),
+        ];
+        let mut output_strings: Vec<String> = vec![];
+        let output_handler = |output_string: String| {
+            output_strings.push(output_string);
+        };
+        realmain(
+            Flags::parse_from(vec!["argv0", "testdata/file1"]),
+            output_handler,
+        );
+        assert_eq!(expected, output_strings);
     }
 }
 
