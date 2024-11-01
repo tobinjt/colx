@@ -5,6 +5,7 @@ use std::fs::File;
 use std::io::BufRead;
 use std::io::BufReader;
 use std::io::Read;
+use std::process;
 
 const ABOUT_TEXT: &str = r#"
 Extract the specified columns from FILES or stdin.
@@ -51,13 +52,6 @@ struct Flags {
         help = "Initial arguments that looks like column specifiers are used as\ncolumn specifiers, then remaining arguments are used as filenames"
     )]
     columns_then_files: Vec<String>,
-}
-
-// Holds the config the user wants, translated from Flags.
-struct Options {
-    delimiter: Regex,
-    separator: String,
-    column_ranges: Vec<ColumnRange>,
 }
 
 /// Read from all the provided files, reading from the next file when the end of the current file
@@ -201,15 +195,8 @@ fn println_wrapper(print_me: String) {
     println!("{}", print_me);
 }
 
-// Process a single line, splitting it, extracting columns, assembling the output, and returning
-// it.
-// TODO: implement process_single_line().
-fn process_single_line(_options: &Options, _line: &str) -> String {
-    String::from("asdf")
-}
-
 // main(), but testable.
-fn realmain<T: FnMut(String)>(flags: Flags, mut output_handler: T) {
+fn realmain<T: FnMut(String)>(flags: Flags, mut output_handler: T) -> i32 {
     let delimiter = Regex::new(
         flags
             .delimiter
@@ -223,21 +210,24 @@ fn realmain<T: FnMut(String)>(flags: Flags, mut output_handler: T) {
         .expect("Internal error: flags should have a default value for separator");
 
     let (column_ranges, filenames) = separate_args(flags.columns_then_files);
+    if column_ranges.is_empty() {
+        eprintln!("At least one column or column range must be provided.");
+        return 1;
+    }
     let input = MultipleFileReader::new(filenames).unwrap();
 
-    let options = Options {
-        delimiter,
-        separator,
-        column_ranges,
-    };
-
     for line in BufReader::new(input).lines() {
-        output_handler(process_single_line(&options, &line.unwrap()));
+        let line = line.unwrap();
+        let mut all_columns: Vec<&str> = delimiter.split(&line).collect();
+        all_columns.insert(0, &line);
+        let wanted_columns = extract_columns(&column_ranges, &all_columns);
+        output_handler(wanted_columns.join(&separator));
     }
+    0
 }
 
 fn main() {
-    realmain(Flags::parse(), println_wrapper);
+    process::exit(realmain(Flags::parse(), println_wrapper));
 }
 
 #[cfg(test)]
@@ -415,29 +405,26 @@ mod realmain {
     use super::*;
 
     #[test]
-    fn does_not_crash_test() {
-        realmain(
-            Flags::parse_from(vec!["argv0", "testdata/file1"]),
-            println_wrapper,
-        );
-    }
-
-    #[test]
     fn basic_test() {
-        let expected = vec![
-            String::from("asdf"),
-            String::from("asdf"),
-            String::from("asdf"),
-        ];
+        let expected = vec![String::from("This"), String::from(""), String::from("It")];
         let mut output_strings: Vec<String> = vec![];
         let output_handler = |output_string: String| {
             output_strings.push(output_string);
         };
-        realmain(
-            Flags::parse_from(vec!["argv0", "testdata/file1"]),
+        let status = realmain(
+            Flags::parse_from(vec!["argv0", "1", "testdata/file1"]),
             output_handler,
         );
+        assert_eq!(0, status);
         assert_eq!(expected, output_strings);
+    }
+
+    #[test]
+    fn no_columns() {
+        let status = realmain(Flags::parse_from(vec!["argv0", "testdata/file1"]), |_| {
+            panic!("output_handler should not have been called!");
+        });
+        assert_eq!(1, status);
     }
 }
 

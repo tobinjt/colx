@@ -42,8 +42,8 @@ repos:
         entry: cargo llvm-cov test
         args:
           [
-            "--fail-uncovered-lines=4",
-            "--fail-uncovered-functions=1",
+            "--fail-uncovered-lines=7",
+            "--fail-uncovered-functions=2",
             "--quiet",
           ]
         pass_filenames: false
