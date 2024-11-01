@@ -1,4 +1,3 @@
-#![allow(dead_code)]
 use clap::Parser;
 use regex::Regex;
 use std::fs::File;
@@ -13,7 +12,7 @@ Extract the specified columns from FILES or stdin.
 Column numbering starts at 1, not 0; column 0 is the entire line, just like awk.
 Column numbers that are out of bounds are silently ignored.  When each line is
 split, empty leading or trailing columns will be discarded _before_ columns are
-extracted.
+extracted.  TODO: implement.
 
 Negative column numbers are accepted; -1 is the last column, -2 is the second
 last, etc.  Note that negative column numbers may not behave as you expect when
@@ -36,20 +35,20 @@ struct Flags {
         short,
         long,
         help = "Regex delimiting input columns; defaults to whitespace",
-        default_value = " "
+        default_value = "\\s+"
     )]
     delimiter: Option<String>,
     // Providing a default value makes it optional.
     #[arg(
         short,
         long,
-        help = "Separator between output columns; defaults to a single space;\nbackslash escape sequences will be expanded",
+        help = "Separator between output columns; defaults to a single space",
         default_value = " "
     )]
     separator: Option<String>,
 
     #[arg(
-        help = "Initial arguments that looks like column specifiers are used as\ncolumn specifiers, then remaining arguments are used as filenames"
+        help = "Leading arguments that look like column specifiers are used as\ncolumn specifiers, then remaining arguments are used as filenames"
     )]
     columns_then_files: Vec<String>,
 }
@@ -69,7 +68,8 @@ impl MultipleFileReader {
     ///
     /// A filename of "-" will use [std::io::stdin] to open stdin.
     ///
-    /// If filenames is empty a filename of "-" will be used instead.
+    /// If filenames is empty a filename of "-" will be used instead.  This supports the standard
+    /// Unix idiom of "if filenames are given read them, else read from stdin".
     fn new(filenames: Vec<String>) -> Result<Self, std::io::Error> {
         Self::new_with_opener(filenames, std::io::stdin)
     }
@@ -115,6 +115,7 @@ impl Read for MultipleFileReader {
     /// - The current input filehandle will be discarded when moving on to the next input, so it
     ///   will automatically be closed.
     /// - Errors from underlying read() calls are returned *without* advancing to the next input.
+    ///   read() will return errors while the underlying read() call continues to return errors.
     fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
         while !self.filehandles.is_empty() {
             let length = self.filehandles[0].read(buf)?;
@@ -129,12 +130,14 @@ impl Read for MultipleFileReader {
     }
 }
 
+// Holds a single column range, start-end inclusive, with start==end for single column ranges.
 #[derive(Debug, PartialEq)]
 struct ColumnRange {
     start: isize,
     end: isize,
 }
 
+// Parse a string that *might* represent a column range.
 fn parse_column_range(maybe_column: &str) -> Option<ColumnRange> {
     if let Ok(single_column) = maybe_column.parse::<isize>() {
         return Some(ColumnRange {
@@ -154,13 +157,19 @@ fn parse_column_range(maybe_column: &str) -> Option<ColumnRange> {
     None
 }
 
+// Split a list of arguments into leading column ranges and remaining filenames.  Returns parsed
+// column ranges and untouched filenames.  This short function is standalone rather than inlined
+// into realmain() because it's easier to test in isolation.
 fn separate_args(args: Vec<String>) -> (Vec<ColumnRange>, Vec<String>) {
     let columns: Vec<ColumnRange> = args.iter().map_while(|x| parse_column_range(x)).collect();
     let filenames: Vec<String> = args[columns.len()..].to_vec();
     (columns, filenames)
 }
 
-// Note: the whole line should be the first column.
+// Extract and return the columns specified by column_ranges from the input columns.  Out of bounds
+// columns will be silently ignored.  The input columns must live for as long as the returned
+// columns, because references are returned rather than copies.  To meet user expectations,
+// columns[0] must be the whole input line.
 fn extract_columns<'a>(column_ranges: &[ColumnRange], columns: &'a [&'a str]) -> Vec<&'a str> {
     let mut results = vec![];
     for column_range in column_ranges.iter() {
@@ -190,13 +199,18 @@ fn extract_columns<'a>(column_ranges: &[ColumnRange], columns: &'a [&'a str]) ->
     results
 }
 
-// A thin wrapper around println!, to be called by process_single_line().
+// A thin wrapper around println!.  This allows me to do dependency injection during tests to
+// validate that the correct data would have been output.
 fn println_wrapper(print_me: String) {
     println!("{}", print_me);
 }
 
-// main(), but testable.
+// main(), but testable.  Uses output_handler to print so that tests can do dependency injection to
+// validate that the correct data is generated.  I'm using dependency injection rather than
+// accumulating a giant array so that processing large files doesn't require memory proportional to
+// the file sizes.
 fn realmain<T: FnMut(String)>(flags: Flags, mut output_handler: T) -> i32 {
+    // TODO: handle the failure case so I can display a nicer error message.
     let delimiter = Regex::new(
         flags
             .delimiter
@@ -218,6 +232,7 @@ fn realmain<T: FnMut(String)>(flags: Flags, mut output_handler: T) -> i32 {
 
     for line in BufReader::new(input).lines() {
         let line = line.unwrap();
+        // TODO: filter empty columns.
         let mut all_columns: Vec<&str> = delimiter.split(&line).collect();
         all_columns.insert(0, &line);
         let wanted_columns = extract_columns(&column_ranges, &all_columns);
@@ -244,7 +259,7 @@ mod clap_test {
     fn parse_args() {
         // Checks that I've configured the parser correctly.
         let flags = Flags::parse_from(vec!["argv0", "1"]);
-        assert_eq!(Some(" "), flags.delimiter.as_deref());
+        assert_eq!(Some("\\s+"), flags.delimiter.as_deref());
 
         let flags = Flags::parse_from(vec![
             "argv0",
@@ -255,6 +270,7 @@ mod clap_test {
             "1",
         ]);
         assert_eq!(Some("asdf"), flags.separator.as_deref());
+        assert_eq!(Some("qwerty"), flags.delimiter.as_deref());
     }
 }
 
@@ -395,7 +411,7 @@ mod println_wrapper {
     use super::*;
 
     #[test]
-    fn placeholder_test() {
+    fn simple_test() {
         println_wrapper(String::from("printed by println_wrapper test."));
     }
 }
@@ -405,7 +421,7 @@ mod realmain {
     use super::*;
 
     #[test]
-    fn basic_test() {
+    fn expected_columns() {
         let expected = vec![String::from("This"), String::from(""), String::from("It")];
         let mut output_strings: Vec<String> = vec![];
         let output_handler = |output_string: String| {
@@ -421,6 +437,7 @@ mod realmain {
 
     #[test]
     fn no_columns() {
+        // TODO: move closure to a function and test it.
         let status = realmain(Flags::parse_from(vec!["argv0", "testdata/file1"]), |_| {
             panic!("output_handler should not have been called!");
         });
