@@ -12,7 +12,7 @@ Extract the specified columns from FILES or stdin.
 Column numbering starts at 1, not 0; column 0 is the entire line, just like awk.
 Column numbers that are out of bounds are silently ignored.  When each line is
 split, empty leading or trailing columns will be discarded _before_ columns are
-extracted.  TODO: implement.
+extracted.
 
 Negative column numbers are accepted; -1 is the last column, -2 is the second
 last, etc.  Note that negative column numbers may not behave as you expect when
@@ -232,8 +232,10 @@ fn realmain<T: FnMut(String)>(flags: Flags, mut output_handler: T) -> i32 {
 
     for line in BufReader::new(input).lines() {
         let line = line.unwrap();
-        // TODO: filter empty columns.
-        let mut all_columns: Vec<&str> = delimiter.split(&line).collect();
+        let mut all_columns: Vec<&str> = delimiter
+            .split(&line)
+            .filter(|col| !col.is_empty())
+            .collect();
         all_columns.insert(0, &line);
         let wanted_columns = extract_columns(&column_ranges, &all_columns);
         output_handler(wanted_columns.join(&separator));
@@ -429,6 +431,27 @@ mod realmain {
         };
         let status = realmain(
             Flags::parse_from(vec!["argv0", "1", "testdata/file1"]),
+            output_handler,
+        );
+        assert_eq!(0, status);
+        assert_eq!(expected, output_strings);
+    }
+
+    #[test]
+    fn empty_columns() {
+        let expected = vec![String::from("empty after")];
+        let mut output_strings: Vec<String> = vec![];
+        let output_handler = |output_string: String| {
+            output_strings.push(output_string);
+        };
+        let status = realmain(
+            Flags::parse_from(vec![
+                "argv0",
+                "1",
+                "--",
+                "-1",
+                "testdata/file_with_empty_columns",
+            ]),
             output_handler,
         );
         assert_eq!(0, status);
