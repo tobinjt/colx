@@ -459,6 +459,50 @@ mod realmain {
     }
 
     #[test]
+    fn change_delimiter() {
+        let expected = vec![String::from("  empty  column  ")];
+        let mut output_strings: Vec<String> = vec![];
+        let output_handler = |output_string: String| {
+            output_strings.push(output_string);
+        };
+        let status = realmain(
+            Flags::parse_from(vec![
+                "argv0",
+                "--delimiter",
+                "before",
+                "1",
+                "testdata/file_with_empty_columns",
+            ]),
+            output_handler,
+        );
+        assert_eq!(0, status);
+        assert_eq!(expected, output_strings);
+    }
+
+    #[test]
+    fn change_separator() {
+        let expected = vec![String::from("emptyASDFafter")];
+        let mut output_strings: Vec<String> = vec![];
+        let output_handler = |output_string: String| {
+            output_strings.push(output_string);
+        };
+        let status = realmain(
+            Flags::parse_from(vec![
+                "argv0",
+                "--separator",
+                "ASDF",
+                "1",
+                "--",
+                "-1",
+                "testdata/file_with_empty_columns",
+            ]),
+            output_handler,
+        );
+        assert_eq!(0, status);
+        assert_eq!(expected, output_strings);
+    }
+
+    #[test]
     fn no_columns() {
         // TODO: move closure to a function and test it.
         let status = realmain(Flags::parse_from(vec!["argv0", "testdata/file1"]), |_| {
