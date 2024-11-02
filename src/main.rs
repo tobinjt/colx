@@ -502,12 +502,22 @@ mod realmain {
         assert_eq!(expected, output_strings);
     }
 
+    fn panic_if_called(message: String) {
+        panic!("output_handler should not have been called!  {message}");
+    }
+
+    #[test]
+    #[should_panic(expected = "output_handler should not have been called")]
+    fn panic_if_called_works() {
+        panic_if_called(String::from("this should panic"));
+    }
+
     #[test]
     fn no_columns() {
-        // TODO: move closure to a function and test it.
-        let status = realmain(Flags::parse_from(vec!["argv0", "testdata/file1"]), |_| {
-            panic!("output_handler should not have been called!");
-        });
+        let status = realmain(
+            Flags::parse_from(vec!["argv0", "testdata/file1"]),
+            panic_if_called,
+        );
         assert_eq!(1, status);
     }
 }
