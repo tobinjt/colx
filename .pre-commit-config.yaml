@@ -45,6 +45,7 @@ repos:
             "--fail-uncovered-lines=5",
             "--fail-uncovered-functions=1",
             "--quiet",
+            "--show-missing-lines",
           ]
         pass_filenames: false
   - repo: meta

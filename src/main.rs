@@ -205,11 +205,21 @@ fn println_wrapper(print_me: String) {
     println!("{}", print_me);
 }
 
+// A thin wrapper around eprintln!.  This allows me to do dependency injection during tests to
+// validate that the correct error would have been output.
+fn eprintln_wrapper(print_me: String) {
+    eprintln!("{}", print_me);
+}
+
 // main(), but testable.  Uses output_handler to print so that tests can do dependency injection to
 // validate that the correct data is generated.  I'm using dependency injection rather than
 // accumulating a giant array so that processing large files doesn't require memory proportional to
 // the file sizes.
-fn realmain<T: FnMut(String)>(flags: Flags, mut output_handler: T) -> i32 {
+fn realmain<OH: FnMut(String), EH: FnMut(String)>(
+    flags: Flags,
+    mut output_handler: OH,
+    mut error_handler: EH,
+) -> i32 {
     let delimiter = Regex::new(
         flags
             .delimiter
@@ -219,7 +229,7 @@ fn realmain<T: FnMut(String)>(flags: Flags, mut output_handler: T) -> i32 {
     let delimiter = match delimiter {
         Ok(re) => re,
         Err(error_message) => {
-            eprintln!("Failed compiling delimiter regex: {error_message}");
+            error_handler(format!("Failed compiling delimiter regex: {error_message}"));
             return 1;
         }
     };
@@ -230,7 +240,9 @@ fn realmain<T: FnMut(String)>(flags: Flags, mut output_handler: T) -> i32 {
 
     let (column_ranges, filenames) = separate_args(flags.columns_then_files);
     if column_ranges.is_empty() {
-        eprintln!("At least one column or column range must be provided.");
+        error_handler(String::from(
+            "At least one column or column range must be provided.",
+        ));
         return 1;
     }
     let input = MultipleFileReader::new(filenames).unwrap();
@@ -249,7 +261,7 @@ fn realmain<T: FnMut(String)>(flags: Flags, mut output_handler: T) -> i32 {
 }
 
 fn main() {
-    process::exit(realmain(Flags::parse(), println_wrapper));
+    process::exit(realmain(Flags::parse(), println_wrapper, eprintln_wrapper));
 }
 
 #[cfg(test)]
@@ -424,15 +436,25 @@ mod println_wrapper {
 }
 
 #[cfg(test)]
+mod eprintln_wrapper {
+    use super::*;
+
+    #[test]
+    fn simple_test() {
+        eprintln_wrapper(String::from("printed by eprintln_wrapper test."));
+    }
+}
+
+#[cfg(test)]
 mod realmain {
     use super::*;
 
     fn panic_if_called(message: String) {
-        panic!("output_handler should not have been called!  {message}");
+        panic!("output_handler/error_handler should not have been called!  {message}");
     }
 
     #[test]
-    #[should_panic(expected = "output_handler should not have been called")]
+    #[should_panic(expected = "output_handler/error_handler should not have been called")]
     fn panic_if_called_works() {
         panic_if_called(String::from("this should panic"));
     }
@@ -447,6 +469,7 @@ mod realmain {
         let status = realmain(
             Flags::parse_from(vec!["argv0", "1", "testdata/file1"]),
             output_handler,
+            panic_if_called,
         );
         assert_eq!(0, status);
         assert_eq!(expected, output_strings);
@@ -468,6 +491,7 @@ mod realmain {
                 "testdata/file_with_empty_columns",
             ]),
             output_handler,
+            panic_if_called,
         );
         assert_eq!(0, status);
         assert_eq!(expected, output_strings);
@@ -489,6 +513,7 @@ mod realmain {
                 "testdata/file_with_empty_columns",
             ]),
             output_handler,
+            panic_if_called,
         );
         assert_eq!(0, status);
         assert_eq!(expected, output_strings);
@@ -496,6 +521,9 @@ mod realmain {
 
     #[test]
     fn bad_delimiter() {
+        let error_handler = |message: String| {
+            assert!(message.contains("Failed compiling delimiter regex: regex parse error"));
+        };
         let status = realmain(
             Flags::parse_from(vec![
                 "argv0",
@@ -505,6 +533,7 @@ mod realmain {
                 "testdata/file_with_empty_columns",
             ]),
             panic_if_called,
+            error_handler,
         );
         assert_eq!(1, status);
     }
@@ -527,6 +556,7 @@ mod realmain {
                 "testdata/file_with_empty_columns",
             ]),
             output_handler,
+            panic_if_called,
         );
         assert_eq!(0, status);
         assert_eq!(expected, output_strings);
@@ -534,9 +564,16 @@ mod realmain {
 
     #[test]
     fn no_columns() {
+        let error_handler = |message: String| {
+            assert_eq!(
+                "At least one column or column range must be provided.",
+                message
+            );
+        };
         let status = realmain(
             Flags::parse_from(vec!["argv0", "testdata/file1"]),
             panic_if_called,
+            error_handler,
         );
         assert_eq!(1, status);
     }
