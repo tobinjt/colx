@@ -210,14 +210,19 @@ fn println_wrapper(print_me: String) {
 // accumulating a giant array so that processing large files doesn't require memory proportional to
 // the file sizes.
 fn realmain<T: FnMut(String)>(flags: Flags, mut output_handler: T) -> i32 {
-    // TODO: handle the failure case so I can display a nicer error message.
     let delimiter = Regex::new(
         flags
             .delimiter
             .expect("Internal error: flags should have a default value for delimiter")
             .as_str(),
-    )
-    .unwrap();
+    );
+    let delimiter = match delimiter {
+        Ok(re) => re,
+        Err(error_message) => {
+            eprintln!("Failed compiling delimiter regex: {error_message}");
+            return 1;
+        }
+    };
 
     let separator = flags
         .separator
@@ -422,6 +427,16 @@ mod println_wrapper {
 mod realmain {
     use super::*;
 
+    fn panic_if_called(message: String) {
+        panic!("output_handler should not have been called!  {message}");
+    }
+
+    #[test]
+    #[should_panic(expected = "output_handler should not have been called")]
+    fn panic_if_called_works() {
+        panic_if_called(String::from("this should panic"));
+    }
+
     #[test]
     fn expected_columns() {
         let expected = vec![String::from("This"), String::from(""), String::from("It")];
@@ -480,6 +495,21 @@ mod realmain {
     }
 
     #[test]
+    fn bad_delimiter() {
+        let status = realmain(
+            Flags::parse_from(vec![
+                "argv0",
+                "--delimiter",
+                "[as",
+                "1",
+                "testdata/file_with_empty_columns",
+            ]),
+            panic_if_called,
+        );
+        assert_eq!(1, status);
+    }
+
+    #[test]
     fn change_separator() {
         let expected = vec![String::from("emptyASDFafter")];
         let mut output_strings: Vec<String> = vec![];
@@ -500,16 +530,6 @@ mod realmain {
         );
         assert_eq!(0, status);
         assert_eq!(expected, output_strings);
-    }
-
-    fn panic_if_called(message: String) {
-        panic!("output_handler should not have been called!  {message}");
-    }
-
-    #[test]
-    #[should_panic(expected = "output_handler should not have been called")]
-    fn panic_if_called_works() {
-        panic_if_called(String::from("this should panic"));
     }
 
     #[test]
