@@ -6,7 +6,7 @@ repos:
     hooks:
       - id: check-merge-conflict
       - id: check-vcs-permalinks
-  - repo: git@github.com:tobinjt/rust-pre-commit-checks.git
+  - repo: https://github.com/tobinjt/rust-pre-commit-checks
     rev: v1.0.0
     hooks:
       - id: cargo-check
