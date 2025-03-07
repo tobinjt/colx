@@ -37,9 +37,19 @@ Options:
           Separator between output columns; defaults to a single space
 ```
 
+### Example
+
+```shell
+$ grep ^root: /etc/passwd | colx -d : -s '!!!' 1 5
+root!!!System Administrator
+```
+
 ## Installation
 
-TODO.
+Install from crates.io using: `cargo install colx`.
+
+There are no pre-built binaries available, contributions to provide binaries are
+welcome.
 
 ## License
 
