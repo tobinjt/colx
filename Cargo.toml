@@ -1,7 +1,15 @@
 [package]
 name = "colx"
-version = "0.1.0"
+version = "1.0.0"
 edition = "2024"
+
+# keep-sorted start
+categories = ["command-line-utilities"]
+description = "Extract the specified columns from FILES or stdin."
+keywords = ["cli", "text"]
+license-file = "LICENSE"
+repository = "https://github.com/tobinjt/colx"
+# keep-sorted end
 
 [dependencies]
 clap = { version = "4.5.18", features = ["derive"] }
