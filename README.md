@@ -46,11 +46,18 @@ root!!!System Administrator
 
 ## Installation
 
-Install from crates.io using: `cargo install colx`.
+`colx` is written in Rust and so needs a Rust toolchain for installation. See
+<https://www.rust-lang.org/tools/install> for how to install Rust. When Rust is
+installed `colx` can be installed from crates.io with:
+
+```shell
+cargo install colx
+```
 
 There are no pre-built binaries available, contributions to provide binaries are
 welcome.
 
 ## License
 
-Apache 2.0; see [`LICENSE`](LICENSE) for details.
+Licensed under the Apache 2.0 licence, see the [`LICENSE`](LICENSE) file
+accompanying the software.
