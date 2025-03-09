@@ -1,13 +1,13 @@
 [package]
 name = "colx"
-version = "1.0.1"
+version = "1.0.2"
 edition = "2024"
 
 # keep-sorted start
 categories = ["command-line-utilities"]
 description = "Extract the specified columns from FILES or stdin."
 keywords = ["cli", "text"]
-license-file = "LICENSE"
+license = "Apache-2.0"
 repository = "https://github.com/tobinjt/colx"
 # keep-sorted end
 
