@@ -305,7 +305,7 @@ mod multiple_file_reader {
 
     impl Read for ReadAlwaysFails {
         fn read(&mut self, _buf: &mut [u8]) -> std::io::Result<usize> {
-            Err(std::io::Error::new(std::io::ErrorKind::Other, "oh no!"))
+            Err(std::io::Error::other("oh no!"))
         }
     }
 
