@@ -31,25 +31,18 @@ onwards (unless you have a *very* long line).
 #[command(version, about, long_about = ABOUT_TEXT)]
 struct Flags {
     // Providing a default value makes it optional.
-    #[arg(
-        short,
-        long,
-        help = "Regex delimiting input columns; defaults to whitespace",
-        default_value = "\\s+"
-    )]
+    /// Regex delimiting input columns; defaults to whitespace.
+    #[arg(short, long, default_value = "\\s+")]
     delimiter: Option<String>,
+
     // Providing a default value makes it optional.
-    #[arg(
-        short,
-        long,
-        help = "Separator between output columns; defaults to a single space",
-        default_value = " "
-    )]
+    /// Separator between output columns; defaults to a single space.
+    #[arg(short, long, default_value = " ")]
     separator: Option<String>,
 
-    #[arg(
-        help = "Leading arguments that look like column specifiers are used as\ncolumn specifiers, then remaining arguments are used as filenames"
-    )]
+    /// Leading arguments that look like column specifiers are used as
+    /// column specifiers, then remaining arguments are used as filenames.
+    #[arg()]
     columns_then_files: Vec<String>,
 }
 
