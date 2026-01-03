@@ -17,7 +17,7 @@ jobs:
         platform:
           # 1. Linux (x86_64) - Debian compatible
           - os_name: Linux-x86_64
-            os: ubuntu-20.04
+            os: ubuntu-24.04
             target: x86_64-unknown-linux-gnu
             bin: colx
             name: colx-linux-x86_64.tar.gz
