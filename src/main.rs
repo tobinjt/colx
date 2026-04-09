@@ -570,6 +570,16 @@ mod realmain {
         );
         assert_eq!(1, status);
     }
+
+    #[test]
+    #[should_panic]
+    fn non_existent_file() {
+        realmain(
+            Flags::parse_from(vec!["argv0", "1", "testdata/file_does_not_exist"]),
+            panic_if_called,
+            panic_if_called,
+        );
+    }
 }
 
 #[cfg(test)]
