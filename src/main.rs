@@ -30,15 +30,13 @@ onwards (unless you have a *very* long line).
 #[derive(Debug, Parser)]
 #[command(version, about, long_about = ABOUT_TEXT)]
 struct Flags {
-    // Providing a default value makes it optional.
     /// Regex delimiting input columns; defaults to whitespace.
     #[arg(short, long, default_value = "\\s+")]
-    delimiter: Option<String>,
+    delimiter: String,
 
-    // Providing a default value makes it optional.
     /// Separator between output columns; defaults to a single space.
     #[arg(short, long, default_value = " ")]
-    separator: Option<String>,
+    separator: String,
 
     /// Leading arguments that look like column specifiers are used as
     /// column specifiers, then remaining arguments are used as filenames.
@@ -213,12 +211,7 @@ fn realmain<OH: FnMut(String), EH: FnMut(String)>(
     mut output_handler: OH,
     mut error_handler: EH,
 ) -> i32 {
-    let delimiter = Regex::new(
-        flags
-            .delimiter
-            .expect("Internal error: flags should have a default value for delimiter")
-            .as_str(),
-    );
+    let delimiter = Regex::new(flags.delimiter.as_str());
     let delimiter = match delimiter {
         Ok(re) => re,
         Err(error_message) => {
@@ -226,10 +219,6 @@ fn realmain<OH: FnMut(String), EH: FnMut(String)>(
             return 1;
         }
     };
-
-    let separator = flags
-        .separator
-        .expect("Internal error: flags should have a default value for separator");
 
     let (column_ranges, filenames) = separate_args(flags.columns_then_files);
     if column_ranges.is_empty() {
@@ -248,7 +237,7 @@ fn realmain<OH: FnMut(String), EH: FnMut(String)>(
             .collect();
         all_columns.insert(0, &line);
         let wanted_columns = extract_columns(&column_ranges, &all_columns);
-        output_handler(wanted_columns.join(&separator));
+        output_handler(wanted_columns.join(&flags.separator));
     }
     0
 }
@@ -271,7 +260,7 @@ mod clap_test {
     fn parse_args() {
         // Checks that I've configured the parser correctly.
         let flags = Flags::parse_from(vec!["argv0", "1"]);
-        assert_eq!(Some("\\s+"), flags.delimiter.as_deref());
+        assert_eq!("\\s+", flags.delimiter);
 
         let flags = Flags::parse_from(vec![
             "argv0",
@@ -281,8 +270,8 @@ mod clap_test {
             "qwerty",
             "1",
         ]);
-        assert_eq!(Some("asdf"), flags.separator.as_deref());
-        assert_eq!(Some("qwerty"), flags.delimiter.as_deref());
+        assert_eq!("asdf", flags.separator);
+        assert_eq!("qwerty", flags.delimiter);
     }
 }
 
