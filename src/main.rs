@@ -238,7 +238,13 @@ fn realmain<OH: FnMut(String), EH: FnMut(String)>(
         ));
         return 1;
     }
-    let input = MultipleFileReader::new(filenames).unwrap();
+    let input = match MultipleFileReader::new(filenames) {
+        Ok(input) => input,
+        Err(e) => {
+            error_handler(format!("{e}"));
+            return 1;
+        }
+    };
 
     for line in BufReader::new(input).lines() {
         let line = line.unwrap();
@@ -569,6 +575,22 @@ mod realmain {
             error_handler,
         );
         assert_eq!(1, status);
+    }
+
+    #[test]
+    fn open_fails() {
+        let mut error_handler_called = false;
+        let error_handler = |message: String| {
+            assert!(message.contains("No such file or directory") || message.contains("cannot find the file"));
+            error_handler_called = true;
+        };
+        let status = realmain(
+            Flags::parse_from(vec!["argv0", "1", "testdata/does_not_exist"]),
+            panic_if_called,
+            error_handler,
+        );
+        assert_eq!(1, status);
+        assert!(error_handler_called);
     }
 }
 
