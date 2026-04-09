@@ -242,11 +242,9 @@ fn realmain<OH: FnMut(String), EH: FnMut(String)>(
 
     for line in BufReader::new(input).lines() {
         let line = line.unwrap();
-        let mut all_columns: Vec<&str> = delimiter
-            .split(&line)
-            .filter(|col| !col.is_empty())
+        let all_columns: Vec<&str> = std::iter::once(line.as_str())
+            .chain(delimiter.split(&line).filter(|col| !col.is_empty()))
             .collect();
-        all_columns.insert(0, &line);
         let wanted_columns = extract_columns(&column_ranges, &all_columns);
         output_handler(wanted_columns.join(&separator));
     }
