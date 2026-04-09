@@ -567,6 +567,15 @@ mod realmain {
     }
 
     #[test]
+    #[should_panic]
+    fn non_existent_file() {
+        realmain(
+            Flags::parse_from(vec!["argv0", "1", "testdata/file_does_not_exist"]),
+            panic_if_called,
+            panic_if_called,
+        );
+
+    #[test]
     fn open_fails() {
         let mut error_handler_called = false;
         let error_handler = |message: String| {
