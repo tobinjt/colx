@@ -581,7 +581,10 @@ mod realmain {
     fn open_fails() {
         let mut error_handler_called = false;
         let error_handler = |message: String| {
-            assert!(message.contains("No such file or directory") || message.contains("cannot find the file"));
+            assert!(
+                message.contains("No such file or directory")
+                    || message.contains("cannot find the file")
+            );
             error_handler_called = true;
         };
         let status = realmain(
