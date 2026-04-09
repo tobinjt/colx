@@ -139,12 +139,10 @@ fn parse_column_range(maybe_column: &str) -> Option<ColumnRange> {
         });
     }
 
-    let regex = Regex::new(r"^(-?\d+):(-?\d+)$").unwrap();
-    if let Some(matches) = regex.captures(maybe_column) {
-        return Some(ColumnRange {
-            start: matches[1].parse::<isize>().unwrap(),
-            end: matches[2].parse::<isize>().unwrap(),
-        });
+    if let Some((start_str, end_str)) = maybe_column.split_once(':') {
+        if let (Ok(start), Ok(end)) = (start_str.parse::<isize>(), end_str.parse::<isize>()) {
+            return Some(ColumnRange { start, end });
+        }
     }
 
     None
