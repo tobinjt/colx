@@ -30,15 +30,13 @@ onwards (unless you have a *very* long line).
 #[derive(Debug, Parser)]
 #[command(version, about, long_about = ABOUT_TEXT)]
 struct Flags {
-    // Providing a default value makes it optional.
     /// Regex delimiting input columns; defaults to whitespace.
     #[arg(short, long, default_value = "\\s+")]
-    delimiter: Option<String>,
+    delimiter: String,
 
-    // Providing a default value makes it optional.
     /// Separator between output columns; defaults to a single space.
     #[arg(short, long, default_value = " ")]
-    separator: Option<String>,
+    separator: String,
 
     /// Leading arguments that look like column specifiers are used as
     /// column specifiers, then remaining arguments are used as filenames.
@@ -213,12 +211,7 @@ fn realmain<OH: FnMut(String), EH: FnMut(String)>(
     mut output_handler: OH,
     mut error_handler: EH,
 ) -> i32 {
-    let delimiter = Regex::new(
-        flags
-            .delimiter
-            .expect("Internal error: flags should have a default value for delimiter")
-            .as_str(),
-    );
+    let delimiter = Regex::new(flags.delimiter.as_str());
     let delimiter = match delimiter {
         Ok(re) => re,
         Err(error_message) => {
@@ -227,10 +220,6 @@ fn realmain<OH: FnMut(String), EH: FnMut(String)>(
         }
     };
 
-    let separator = flags
-        .separator
-        .expect("Internal error: flags should have a default value for separator");
-
     let (column_ranges, filenames) = separate_args(flags.columns_then_files);
     if column_ranges.is_empty() {
         error_handler(String::from(
@@ -238,7 +227,13 @@ fn realmain<OH: FnMut(String), EH: FnMut(String)>(
         ));
         return 1;
     }
-    let input = MultipleFileReader::new(filenames).unwrap();
+    let input = match MultipleFileReader::new(filenames) {
+        Ok(input) => input,
+        Err(e) => {
+            error_handler(format!("{e}"));
+            return 1;
+        }
+    };
 
     for line in BufReader::new(input).lines() {
         let line = line.unwrap();
@@ -248,7 +243,7 @@ fn realmain<OH: FnMut(String), EH: FnMut(String)>(
             .collect();
         all_columns.insert(0, &line);
         let wanted_columns = extract_columns(&column_ranges, &all_columns);
-        output_handler(wanted_columns.join(&separator));
+        output_handler(wanted_columns.join(&flags.separator));
     }
     0
 }
@@ -271,7 +266,7 @@ mod clap_test {
     fn parse_args() {
         // Checks that I've configured the parser correctly.
         let flags = Flags::parse_from(vec!["argv0", "1"]);
-        assert_eq!(Some("\\s+"), flags.delimiter.as_deref());
+        assert_eq!("\\s+", flags.delimiter);
 
         let flags = Flags::parse_from(vec![
             "argv0",
@@ -281,8 +276,8 @@ mod clap_test {
             "qwerty",
             "1",
         ]);
-        assert_eq!(Some("asdf"), flags.separator.as_deref());
-        assert_eq!(Some("qwerty"), flags.delimiter.as_deref());
+        assert_eq!("asdf", flags.separator);
+        assert_eq!("qwerty", flags.delimiter);
     }
 }
 
@@ -579,6 +574,24 @@ mod realmain {
             panic_if_called,
             panic_if_called,
         );
+
+    #[test]
+    fn open_fails() {
+        let mut error_handler_called = false;
+        let error_handler = |message: String| {
+            assert!(
+                message.contains("No such file or directory")
+                    || message.contains("cannot find the file")
+            );
+            error_handler_called = true;
+        };
+        let status = realmain(
+            Flags::parse_from(vec!["argv0", "1", "testdata/does_not_exist"]),
+            panic_if_called,
+            error_handler,
+        );
+        assert_eq!(1, status);
+        assert!(error_handler_called);
     }
 }
 
@@ -622,6 +635,12 @@ mod parse_column_range {
         assert_eq!(None, parse_column_range("1:2-"));
         assert_eq!(None, parse_column_range(":2"));
         assert_eq!(None, parse_column_range("1:"));
+    }
+
+    #[test]
+    #[should_panic(expected = "ParseIntError { kind: PosOverflow }")]
+    fn integer_overflow() {
+        parse_column_range("9999999999999999999999999999999999999999999999999999999999:1");
     }
 }
 
@@ -688,6 +707,15 @@ mod extract_columns {
         let expected = vec!["asdf"];
         let column_ranges = [ColumnRange { start: 1, end: 1 }];
         let columns = ["ignored", "asdf", "ignored"];
+        let actual = extract_columns(&column_ranges, &columns);
+        assert_eq!(expected, actual);
+    }
+
+    #[test]
+    fn empty_columns_slice() {
+        let expected: Vec<&str> = vec![];
+        let column_ranges = [ColumnRange { start: 1, end: 1 }];
+        let columns: [&str; 0] = [];
         let actual = extract_columns(&column_ranges, &columns);
         assert_eq!(expected, actual);
     }
