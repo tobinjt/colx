@@ -627,6 +627,12 @@ mod parse_column_range {
         assert_eq!(None, parse_column_range(":2"));
         assert_eq!(None, parse_column_range("1:"));
     }
+
+    #[test]
+    #[should_panic(expected = "ParseIntError { kind: PosOverflow }")]
+    fn integer_overflow() {
+        parse_column_range("9999999999999999999999999999999999999999999999999999999999:1");
+    }
 }
 
 #[cfg(test)]
