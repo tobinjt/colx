@@ -210,9 +210,29 @@ fn eprintln_wrapper(print_me: String) {
 // the file sizes.
 fn realmain<OH: FnMut(String), EH: FnMut(String)>(
     flags: Flags,
+    output_handler: OH,
+    error_handler: EH,
+) -> i32 {
+    realmain_with_reader(
+        flags,
+        output_handler,
+        error_handler,
+        MultipleFileReader::new,
+    )
+}
+
+fn realmain_with_reader<OH, EH, R, F>(
+    flags: Flags,
     mut output_handler: OH,
     mut error_handler: EH,
-) -> i32 {
+    mut reader_opener: F,
+) -> i32
+where
+    OH: FnMut(String),
+    EH: FnMut(String),
+    R: Read,
+    F: FnMut(Vec<String>) -> Result<R, std::io::Error>,
+{
     let delimiter = Regex::new(
         flags
             .delimiter
@@ -238,10 +258,22 @@ fn realmain<OH: FnMut(String), EH: FnMut(String)>(
         ));
         return 1;
     }
-    let input = MultipleFileReader::new(filenames).unwrap();
+    let input = match reader_opener(filenames) {
+        Ok(input) => input,
+        Err(error) => {
+            error_handler(format!("Failed opening files: {error}"));
+            return 1;
+        }
+    };
 
     for line in BufReader::new(input).lines() {
-        let line = line.unwrap();
+        let line = match line {
+            Ok(line) => line,
+            Err(error) => {
+                error_handler(format!("Failed reading line: {error}"));
+                return 1;
+            }
+        };
         let mut all_columns: Vec<&str> = delimiter
             .split(&line)
             .filter(|col| !col.is_empty())
@@ -287,20 +319,22 @@ mod clap_test {
 }
 
 #[cfg(test)]
+/// An implementation of [std::io::Read] that always fails with [std::io::Error] derived from
+/// std::io::ErrorKind::Other.
+struct ReadAlwaysFails {}
+
+#[cfg(test)]
+impl Read for ReadAlwaysFails {
+    fn read(&mut self, _buf: &mut [u8]) -> std::io::Result<usize> {
+        Err(std::io::Error::other("oh no!"))
+    }
+}
+
+#[cfg(test)]
 mod multiple_file_reader {
     use super::*;
     use std::io::BufRead;
     use std::io::BufReader;
-
-    /// An implementation of [std::io::Read] that always fails with [std::io::Error] derived from
-    /// std::io::ErrorKind::Other.
-    struct ReadAlwaysFails {}
-
-    impl Read for ReadAlwaysFails {
-        fn read(&mut self, _buf: &mut [u8]) -> std::io::Result<usize> {
-            Err(std::io::Error::other("oh no!"))
-        }
-    }
 
     #[test]
     fn stdin() {
@@ -569,6 +603,36 @@ mod realmain {
             error_handler,
         );
         assert_eq!(1, status);
+    }
+
+    #[test]
+    fn realmain_open_fails() {
+        let mut error_called = false;
+        let error_handler = |message: String| {
+            assert!(message.contains("Failed opening files"));
+            error_called = true;
+        };
+        let status = realmain(
+            Flags::parse_from(vec!["argv0", "1", "testdata/does_not_exist"]),
+            panic_if_called,
+            error_handler,
+        );
+        assert_eq!(1, status);
+        assert!(error_called);
+    }
+
+    #[test]
+    fn realmain_read_fails() {
+        let mut error_called = false;
+        let error_handler = |message: String| {
+            assert!(message.contains("Failed reading line"));
+            error_called = true;
+        };
+        let flags = Flags::parse_from(vec!["argv0", "1"]);
+        let opener = |_filenames| Ok(ReadAlwaysFails {});
+        let status = realmain_with_reader(flags, panic_if_called, error_handler, opener);
+        assert_eq!(1, status);
+        assert!(error_called);
     }
 }
 
