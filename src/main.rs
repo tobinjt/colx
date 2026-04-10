@@ -572,6 +572,7 @@ mod realmain {
             panic_if_called,
             panic_if_called,
         );
+    }
 
     #[test]
     fn open_fails() {
