@@ -5,6 +5,7 @@ use std::io::BufRead;
 use std::io::BufReader;
 use std::io::Read;
 use std::process;
+use std::sync::LazyLock;
 
 const ABOUT_TEXT: &str = r#"
 Extract the specified columns from FILES or stdin.
@@ -137,8 +138,8 @@ fn parse_column_range(maybe_column: &str) -> Option<ColumnRange> {
         });
     }
 
-    let regex = Regex::new(r"^(-?\d+):(-?\d+)$").unwrap();
-    if let Some(matches) = regex.captures(maybe_column) {
+    static REGEX: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"^(-?\d+):(-?\d+)$").unwrap());
+    if let Some(matches) = REGEX.captures(maybe_column) {
         return Some(ColumnRange {
             start: matches[1].parse::<isize>().unwrap(),
             end: matches[2].parse::<isize>().unwrap(),
