@@ -1,5 +1,6 @@
 use clap::Parser;
 use regex::Regex;
+use std::collections::VecDeque;
 use std::fs::File;
 use std::io::BufRead;
 use std::io::BufReader;
@@ -47,7 +48,7 @@ struct Flags {
 /// Read from all the provided files, reading from the next file when the end of the current file
 /// is reached.  Reads from Stdin if a filename is "-".
 struct MultipleFileReader {
-    filehandles: Vec<Box<dyn Read>>,
+    filehandles: VecDeque<Box<dyn Read>>,
 }
 
 impl MultipleFileReader {
@@ -93,7 +94,9 @@ impl MultipleFileReader {
     /// implementing the [std::io::Read] trait).  Uses the filehandles unchanged, so they can
     /// point to anything: files, stdin, sockets, ...
     fn new_from_filehandles(filehandles: Vec<Box<dyn Read>>) -> MultipleFileReader {
-        Self { filehandles }
+        Self {
+            filehandles: VecDeque::from(filehandles),
+        }
     }
 }
 
@@ -114,7 +117,7 @@ impl Read for MultipleFileReader {
                 return Ok(length);
             }
             // Filehandle has run out of data.
-            self.filehandles.remove(0);
+            self.filehandles.pop_front();
         }
         // Run out of files to read.
         Ok(0)
