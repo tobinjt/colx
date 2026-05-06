@@ -695,6 +695,19 @@ mod separate_args {
         ];
         assert_eq!(expected_filenames, actual_filenames);
     }
+
+    #[test]
+    fn invalid_column_aborts_early() {
+        let (actual_columns, actual_filenames) = separate_args(vec![
+            String::from("1"),
+            String::from("invalid"),
+            String::from("2"),
+        ]);
+        let expected_columns = vec![ColumnRange { start: 1, end: 1 }];
+        assert_eq!(expected_columns, actual_columns);
+        let expected_filenames = vec![String::from("invalid"), String::from("2")];
+        assert_eq!(expected_filenames, actual_filenames);
+    }
 }
 
 #[cfg(test)]
