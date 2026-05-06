@@ -679,6 +679,12 @@ mod parse_column_range {
     fn integer_overflow() {
         parse_column_range("9999999999999999999999999999999999999999999999999999999999:1");
     }
+
+    #[test]
+    #[should_panic(expected = "ParseIntError { kind: PosOverflow }")]
+    fn integer_overflow_multiple() {
+        parse_column_range("1:9999999999999999999999999999999999999999999999999999999999");
+    }
 }
 
 #[cfg(test)]
