@@ -595,6 +595,41 @@ mod realmain {
         assert_eq!(1, status);
         assert!(error_handler_called);
     }
+
+    #[test]
+    fn multiple_files() {
+        let expected = vec![
+            String::from("This is file 1."),
+            String::from(""),
+            String::from("It is not very interesting."),
+            String::from("File 2 isn't really any better than file 1."),
+            String::from(""),
+            String::from(""),
+            String::from("It has more blank lines.  Including a trailing blank line."),
+            String::from(""),
+            String::from(
+                "File 3 is just here to tell you that the next file was Lorem Ipsum but I",
+            ),
+            String::from("deleted it."),
+        ];
+        let mut output_strings: Vec<String> = vec![];
+        let output_handler = |output_string: String| {
+            output_strings.push(output_string);
+        };
+        let status = realmain(
+            Flags::parse_from(vec![
+                "argv0",
+                "0",
+                "testdata/file1",
+                "testdata/file2",
+                "testdata/file3",
+            ]),
+            output_handler,
+            panic_if_called,
+        );
+        assert_eq!(0, status);
+        assert_eq!(expected, output_strings);
+    }
 }
 
 #[cfg(test)]
