@@ -143,8 +143,8 @@ fn parse_column_range(maybe_column: &str) -> Option<ColumnRange> {
     let regex = Regex::new(r"^(-?\d+):(-?\d+)$").unwrap();
     if let Some(matches) = regex.captures(maybe_column) {
         return Some(ColumnRange {
-            start: matches[1].parse::<isize>().unwrap(),
-            end: matches[2].parse::<isize>().unwrap(),
+            start: matches[1].parse::<isize>().ok()?,
+            end: matches[2].parse::<isize>().ok()?,
         });
     }
 
@@ -653,9 +653,11 @@ mod parse_column_range {
     }
 
     #[test]
-    #[should_panic(expected = "ParseIntError { kind: PosOverflow }")]
     fn integer_overflow() {
-        parse_column_range("9999999999999999999999999999999999999999999999999999999999:1");
+        assert_eq!(
+            None,
+            parse_column_range("9999999999999999999999999999999999999999999999999999999999:1")
+        );
     }
 
     #[test]
