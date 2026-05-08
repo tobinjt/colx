@@ -1,12 +1,16 @@
-#!/usr/bin/env -S make_rust_github_workflow colx
+#!/usr/bin/env -S make_github_workflows
 name: Security Audit
 
 on:
   # Scan on push to main and for all Pull Requests
   push:
-    branches: [ "main" ]
+    paths:
+      - 'Cargo.toml'
+      - 'Cargo.lock'
   pull_request:
-    branches: [ "main" ]
+    paths:
+      - 'Cargo.toml'
+      - 'Cargo.lock'
   # Scan every day at midnight to catch new advisories
   schedule:
     - cron: '0 0 * * *'
@@ -15,8 +19,12 @@ permissions:
   contents: read
 
 jobs:
-  audit:
+  audit-dependencies:
     runs-on: ubuntu-latest
+    name: Runs `cargo audit`.
+    concurrency:
+      group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+      cancel-in-progress: true
     steps:
       - name: Checkout code
         uses: actions/checkout@v6

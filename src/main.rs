@@ -1,5 +1,6 @@
 use clap::Parser;
 use regex::Regex;
+use std::collections::VecDeque;
 use std::fs::File;
 use std::io::BufRead;
 use std::io::BufReader;
@@ -47,7 +48,7 @@ struct Flags {
 /// Read from all the provided files, reading from the next file when the end of the current file
 /// is reached.  Reads from Stdin if a filename is "-".
 struct MultipleFileReader {
-    filehandles: Vec<Box<dyn Read>>,
+    filehandles: VecDeque<Box<dyn Read>>,
 }
 
 impl MultipleFileReader {
@@ -93,7 +94,9 @@ impl MultipleFileReader {
     /// implementing the [std::io::Read] trait).  Uses the filehandles unchanged, so they can
     /// point to anything: files, stdin, sockets, ...
     fn new_from_filehandles(filehandles: Vec<Box<dyn Read>>) -> MultipleFileReader {
-        Self { filehandles }
+        Self {
+            filehandles: VecDeque::from(filehandles),
+        }
     }
 }
 
@@ -114,7 +117,7 @@ impl Read for MultipleFileReader {
                 return Ok(length);
             }
             // Filehandle has run out of data.
-            self.filehandles.remove(0);
+            self.filehandles.pop_front();
         }
         // Run out of files to read.
         Ok(0)
@@ -140,8 +143,8 @@ fn parse_column_range(maybe_column: &str) -> Option<ColumnRange> {
     let regex = Regex::new(r"^(-?\d+):(-?\d+)$").unwrap();
     if let Some(matches) = regex.captures(maybe_column) {
         return Some(ColumnRange {
-            start: matches[1].parse::<isize>().unwrap(),
-            end: matches[2].parse::<isize>().unwrap(),
+            start: matches[1].parse::<isize>().ok()?,
+            end: matches[2].parse::<isize>().ok()?,
         });
     }
 
@@ -592,6 +595,41 @@ mod realmain {
         assert_eq!(1, status);
         assert!(error_handler_called);
     }
+
+    #[test]
+    fn multiple_files() {
+        let expected = vec![
+            String::from("This is file 1."),
+            String::from(""),
+            String::from("It is not very interesting."),
+            String::from("File 2 isn't really any better than file 1."),
+            String::from(""),
+            String::from(""),
+            String::from("It has more blank lines.  Including a trailing blank line."),
+            String::from(""),
+            String::from(
+                "File 3 is just here to tell you that the next file was Lorem Ipsum but I",
+            ),
+            String::from("deleted it."),
+        ];
+        let mut output_strings: Vec<String> = vec![];
+        let output_handler = |output_string: String| {
+            output_strings.push(output_string);
+        };
+        let status = realmain(
+            Flags::parse_from(vec![
+                "argv0",
+                "0",
+                "testdata/file1",
+                "testdata/file2",
+                "testdata/file3",
+            ]),
+            output_handler,
+            panic_if_called,
+        );
+        assert_eq!(0, status);
+        assert_eq!(expected, output_strings);
+    }
 }
 
 #[cfg(test)]
@@ -637,9 +675,17 @@ mod parse_column_range {
     }
 
     #[test]
-    #[should_panic(expected = "ParseIntError { kind: PosOverflow }")]
     fn integer_overflow() {
-        parse_column_range("9999999999999999999999999999999999999999999999999999999999:1");
+        assert_eq!(
+            None,
+            parse_column_range("9999999999999999999999999999999999999999999999999999999999:1")
+        );
+    }
+
+    #[test]
+    #[should_panic(expected = "ParseIntError { kind: PosOverflow }")]
+    fn integer_overflow_multiple() {
+        parse_column_range("1:9999999999999999999999999999999999999999999999999999999999");
     }
 }
 
@@ -693,6 +739,19 @@ mod separate_args {
             String::from("1"),
             String::from("baz"),
         ];
+        assert_eq!(expected_filenames, actual_filenames);
+    }
+
+    #[test]
+    fn invalid_column_aborts_early() {
+        let (actual_columns, actual_filenames) = separate_args(vec![
+            String::from("1"),
+            String::from("invalid"),
+            String::from("2"),
+        ]);
+        let expected_columns = vec![ColumnRange { start: 1, end: 1 }];
+        assert_eq!(expected_columns, actual_columns);
+        let expected_filenames = vec![String::from("invalid"), String::from("2")];
         assert_eq!(expected_filenames, actual_filenames);
     }
 }
