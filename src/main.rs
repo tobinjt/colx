@@ -206,20 +206,34 @@ fn eprintln_wrapper(print_me: String) {
 // validate that the correct data is generated.  I'm using dependency injection rather than
 // accumulating a giant array so that processing large files doesn't require memory proportional to
 // the file sizes.
-fn realmain<OH: FnMut(String)>(
+fn realmain<OH: FnMut(String), EH: FnMut(String)>(
     flags: Flags,
     mut output_handler: OH,
-) -> Result<(), String> {
-    let delimiter = Regex::new(flags.delimiter.as_str())
-        .map_err(|error_message| format!("Failed compiling delimiter regex: {error_message}"))?;
+    mut error_handler: EH,
+) -> i32 {
+    let delimiter = Regex::new(flags.delimiter.as_str());
+    let delimiter = match delimiter {
+        Ok(re) => re,
+        Err(error_message) => {
+            error_handler(format!("Failed compiling delimiter regex: {error_message}"));
+            return 1;
+        }
+    };
 
     let (column_ranges, filenames) = separate_args(flags.columns_then_files);
     if column_ranges.is_empty() {
-        return Err(String::from(
+        error_handler(String::from(
             "At least one column or column range must be provided.",
         ));
+        return 1;
     }
-    let input = MultipleFileReader::new(filenames).map_err(|e| format!("{e}"))?;
+    let input = match MultipleFileReader::new(filenames) {
+        Ok(input) => input,
+        Err(e) => {
+            error_handler(format!("{e}"));
+            return 1;
+        }
+    };
 
     for line in BufReader::new(input).lines() {
         let line = line.unwrap();
@@ -229,17 +243,11 @@ fn realmain<OH: FnMut(String)>(
         let wanted_columns = extract_columns(&column_ranges, &all_columns);
         output_handler(wanted_columns.join(&flags.separator));
     }
-    Ok(())
+    0
 }
 
 fn main() {
-    match realmain(Flags::parse(), println_wrapper) {
-        Ok(()) => process::exit(0),
-        Err(e) => {
-            eprintln_wrapper(e);
-            process::exit(1);
-        }
-    }
+    process::exit(realmain(Flags::parse(), println_wrapper, eprintln_wrapper));
 }
 
 #[cfg(test)]
@@ -447,8 +455,9 @@ mod realmain {
         let status = realmain(
             Flags::parse_from(vec!["argv0", "1", "testdata/file1"]),
             output_handler,
+            panic_if_called,
         );
-        assert_eq!(Ok(()), status);
+        assert_eq!(0, status);
         assert_eq!(expected, output_strings);
     }
 
@@ -468,8 +477,9 @@ mod realmain {
                 "testdata/file_with_empty_columns",
             ]),
             output_handler,
+            panic_if_called,
         );
-        assert_eq!(Ok(()), status);
+        assert_eq!(0, status);
         assert_eq!(expected, output_strings);
     }
 
@@ -489,13 +499,17 @@ mod realmain {
                 "testdata/file_with_empty_columns",
             ]),
             output_handler,
+            panic_if_called,
         );
-        assert_eq!(Ok(()), status);
+        assert_eq!(0, status);
         assert_eq!(expected, output_strings);
     }
 
     #[test]
     fn bad_delimiter() {
+        let error_handler = |message: String| {
+            assert!(message.contains("Failed compiling delimiter regex: regex parse error"));
+        };
         let status = realmain(
             Flags::parse_from(vec![
                 "argv0",
@@ -505,11 +519,9 @@ mod realmain {
                 "testdata/file_with_empty_columns",
             ]),
             panic_if_called,
+            error_handler,
         );
-        match status {
-            Err(msg) => assert!(msg.contains("Failed compiling delimiter regex: regex parse error")),
-            Ok(_) => panic!("Expected error due to bad delimiter"),
-        }
+        assert_eq!(1, status);
     }
 
     #[test]
@@ -530,45 +542,55 @@ mod realmain {
                 "testdata/file_with_empty_columns",
             ]),
             output_handler,
+            panic_if_called,
         );
-        assert_eq!(Ok(()), status);
+        assert_eq!(0, status);
         assert_eq!(expected, output_strings);
     }
 
     #[test]
     fn no_columns() {
+        let error_handler = |message: String| {
+            assert_eq!(
+                "At least one column or column range must be provided.",
+                message
+            );
+        };
         let status = realmain(
             Flags::parse_from(vec!["argv0", "testdata/file1"]),
             panic_if_called,
+            error_handler,
         );
-        assert_eq!(
-            Err("At least one column or column range must be provided.".to_string()),
-            status
-        );
+        assert_eq!(1, status);
     }
 
     #[test]
+    #[should_panic]
     fn non_existent_file() {
-        let status = realmain(
+        realmain(
             Flags::parse_from(vec!["argv0", "1", "testdata/file_does_not_exist"]),
             panic_if_called,
+            panic_if_called,
         );
-        assert!(status.is_err());
     }
 
     #[test]
     fn open_fails() {
+        let mut error_handler_called = false;
+        let error_handler = |message: String| {
+            assert!(
+                message.contains("No such file or directory")
+                    || message.contains("cannot find the file")
+            );
+            error_handler_called = true;
+        };
         let status = realmain(
             Flags::parse_from(vec!["argv0", "1", "testdata/does_not_exist"]),
             panic_if_called,
+            error_handler,
         );
-        match status {
-            Err(msg) => assert!(
-                msg.contains("No such file or directory")
-                    || msg.contains("cannot find the file")
-            ),
-            Ok(_) => panic!("Expected open to fail"),
-        }
+        assert_eq!(1, status);
+        assert!(error_handler_called);
     }
 }
 
