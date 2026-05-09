@@ -151,9 +151,9 @@ fn parse_column_range(maybe_column: &str) -> Option<ColumnRange> {
 // Split a list of arguments into leading column ranges and remaining filenames.  Returns parsed
 // column ranges and untouched filenames.  This short function is standalone rather than inlined
 // into realmain() because it's easier to test in isolation.
-fn separate_args(args: Vec<String>) -> (Vec<ColumnRange>, Vec<String>) {
+fn separate_args(mut args: Vec<String>) -> (Vec<ColumnRange>, Vec<String>) {
     let columns: Vec<ColumnRange> = args.iter().map_while(|x| parse_column_range(x)).collect();
-    let filenames: Vec<String> = args[columns.len()..].to_vec();
+    let filenames = args.split_off(columns.len());
     (columns, filenames)
 }
 
