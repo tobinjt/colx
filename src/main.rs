@@ -160,6 +160,26 @@ fn separate_args(mut args: Vec<String>) -> (Vec<ColumnRange>, Vec<String>) {
     (columns, filenames)
 }
 
+// Resolves a possibly negative index into a valid `usize` index for a slice of the given length.
+// Returns `None` if the resulting index is out of bounds.
+fn resolve_index(i: isize, len: usize) -> Option<usize> {
+    let j = if i < 0 {
+        // Convert separately because it's much easier than combining conversion and math.
+        let len_isize: isize = len.try_into().unwrap();
+        i + len_isize
+    } else {
+        i
+    };
+    if j < 0 {
+        return None;
+    }
+    let k: usize = j.try_into().unwrap();
+    if k >= len {
+        return None;
+    }
+    Some(k)
+}
+
 // Extract and return the columns specified by column_ranges from the input columns.  Out of bounds
 // columns will be silently ignored.  The input columns must live for as long as the returned
 // columns, because references are returned rather than copies.  To meet user expectations,
@@ -173,21 +193,9 @@ fn extract_columns<'a>(column_ranges: &[ColumnRange], columns: &'a [&'a str]) ->
             (column_range.end..=column_range.start).rev().collect()
         };
         for i in indices {
-            let j = if i < 0 {
-                // Convert separately because it's much easier than combining conversion and math.
-                let len: isize = columns.len().try_into().unwrap();
-                i + len
-            } else {
-                i
-            };
-            if j < 0 {
-                continue;
+            if let Some(k) = resolve_index(i, columns.len()) {
+                results.push(columns[k]);
             }
-            let k: usize = j.try_into().unwrap();
-            if k >= columns.len() {
-                continue;
-            }
-            results.push(columns[k])
         }
     }
     results
