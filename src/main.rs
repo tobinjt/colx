@@ -772,6 +772,15 @@ mod extract_columns {
     }
 
     #[test]
+    fn negative_index_empty_columns() {
+        let expected: Vec<&str> = vec![];
+        let column_ranges = [ColumnRange { start: -1, end: -1 }];
+        let columns: [&str; 0] = [];
+        let actual = extract_columns(&column_ranges, &columns);
+        assert_eq!(expected, actual);
+    }
+
+    #[test]
     fn empty_columns_slice() {
         let expected: Vec<&str> = vec![];
         let column_ranges = [ColumnRange { start: 1, end: 1 }];
