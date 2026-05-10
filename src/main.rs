@@ -111,8 +111,8 @@ impl Read for MultipleFileReader {
     /// - Errors from underlying read() calls are returned *without* advancing to the next input.
     ///   read() will return errors while the underlying read() call continues to return errors.
     fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
-        while !self.filehandles.is_empty() {
-            let length = self.filehandles[0].read(buf)?;
+        while let Some(handle) = self.filehandles.front_mut() {
+            let length = handle.read(buf)?;
             if length > 0 {
                 return Ok(length);
             }
@@ -420,6 +420,13 @@ mod multiple_file_reader {
         assert!(multi_file_reader.read(&mut buffer).is_err());
         assert!(multi_file_reader.read(&mut buffer).is_err());
     }
+
+    #[test]
+    fn empty_reader_returns_eof() {
+        let mut reader = MultipleFileReader::new_from_filehandles(vec![]);
+        let mut buffer = [0; 10];
+        assert_eq!(reader.read(&mut buffer).unwrap(), 0);
+    }
 }
 
 #[cfg(test)]
@@ -589,10 +596,7 @@ mod realmain {
     fn open_fails() {
         let mut error_handler_called = false;
         let error_handler = |message: String| {
-            assert!(
-                message.contains("No such file or directory")
-                    || message.contains("cannot find the file")
-            );
+            assert!(message.contains("No such file or directory"));
             error_handler_called = true;
         };
         let status = realmain(

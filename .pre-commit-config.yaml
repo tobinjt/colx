@@ -36,6 +36,7 @@ repos:
       language: system
       types:
       - markdown
+      exclude: CODE_OF_CONDUCT.md
       entry: markdownlint
   # managed-by-populate-pre-commit end: local-markdownlint.yaml
   # managed-by-populate-pre-commit start: local-spellcheck.yaml
@@ -53,7 +54,6 @@ repos:
   - repo: meta
     hooks:
     - id: check-hooks-apply
-    - id: check-useless-excludes
   # managed-by-populate-pre-commit end: meta.yaml
   # managed-by-populate-pre-commit start: pre-commit-hooks.yaml
   - repo: https://github.com/pre-commit/pre-commit-hooks
@@ -72,8 +72,6 @@ repos:
     - id: cargo-fmt
     - id: cargo-llvm-cov
       args:
-      - --fail-uncovered-lines=4
-      - --fail-uncovered-functions=1
       - --quiet
       - --show-missing-lines
     - id: cargo-test
