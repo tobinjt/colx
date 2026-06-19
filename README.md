@@ -1,5 +1,15 @@
 # colx
 
+<!-- START doctoc generated TOC please keep comment here to allow auto update -->
+<!-- DON'T EDIT THIS SECTION, INSTEAD RE-RUN doctoc TO UPDATE -->
+
+- [Usage](#usage)
+  - [Example](#example)
+- [Installation](#installation)
+- [License](#license)
+
+<!-- END doctoc generated TOC please keep comment here to allow auto update -->
+
 Extract the specified columns from FILES or stdin.
 
 Column numbering starts at 1, not 0; column 0 is the entire line, just like awk.
