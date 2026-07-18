@@ -18,3 +18,8 @@ regex = "1.13.1"
 [dev-dependencies]
 assert_cmd = "2.2.2"
 predicates = "3.1.4"
+
+# The profile that 'dist' will build with
+[profile.dist]
+inherits = "release"
+lto = "thin"
